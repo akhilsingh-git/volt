@@ -75,7 +75,7 @@ services:
       - ./mosquitto/config/acl:/mosquitto/config/acl:ro
     restart: unless-stopped
 
-  # ── turing: clip recommender (synthetic models seeded at startup) ──
+  # ── reco: clip recommender (synthetic demo catalog) ──
   reco:
     build: ./reco
     environment:

@@ -192,7 +192,7 @@
   </div>
 
   <div class="reco">
-    <h3>Recommended clips <small id="recoNote">— turing</small></h3>
+    <h3>Recommended clips <small id="recoNote">— reco</small></h3>
     <div class="rail" id="rail"></div>
   </div>
 </div>
@@ -469,7 +469,7 @@ async function loadReco(){
     const r = await fetch(`/reco/api/v1/clips/?user_id=${userId}&filters=`, { headers:{ 'X-CLIENT-ID':'volt-local','X-CLIENT-SECRET':'volt-local-secret' } });
     const j = await r.json();
     const uids = Object.keys((j.data&&j.data.clip_uids)||{}).slice(0,14);
-    $('#recoNote').textContent = `— turing · ${userId} · ${j.data.is_generic_suggestion?'trending':'for you'}`;
+    $('#recoNote').textContent = `— reco · ${userId} · ${j.data.is_generic_suggestion?'trending':'for you'}`;
     const rail=$('#rail'); rail.innerHTML='';
     uids.forEach(uid=>{ const cat=uid.split('_')[1]; const el=document.createElement('div'); el.className='clip'; el.innerHTML='<div class="thumb">▶</div><div class="meta"><div class="t"></div><div class="c"></div></div>'; el.querySelector('.t').textContent=uid; el.querySelector('.c').textContent=CATS[cat]||('cat '+cat); rail.appendChild(el); });
   }catch(e){ $('#recoNote').textContent='— reco unavailable'; }
