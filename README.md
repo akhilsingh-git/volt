@@ -1,9 +1,17 @@
 # Volt ⚡
 
+![Volt](docs/banner.svg)
+
+[![CI](https://github.com/akhilsingh-git/volt/actions/workflows/ci.yml/badge.svg)](https://github.com/akhilsingh-git/volt/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-00e5ff.svg)](LICENSE)
+
 A self-contained, local **live game-streaming platform** — think a miniature Twitch you
 can run on one machine with `docker compose up`. Real accounts and stream keys, gated
 RTMP/WebRTC ingest, an adaptive transcode ladder, three playback latency tiers, live chat
 rooms, and a clip recommender — all served same-origin from **http://localhost:8088**.
+
+> **Screenshots:** drop your own into `docs/` and reference them here, e.g.
+> `![watch page](docs/watch.png)` — the UI is a neon/HUD esports theme.
 
 ```
                           ┌─────────── Volt API (FastAPI + SQLite) ───────────┐
