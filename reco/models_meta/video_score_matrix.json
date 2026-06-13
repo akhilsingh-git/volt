@@ -1,0 +1,15 @@
+{
+    "AcceptRanges": "loaded at build time from dockerfile",
+    "LastModified": "loaded at build time from dockerfile",
+    "ContentLength": "loaded at build time from dockerfile",
+    "ETag": "loaded at build time from dockerfile",
+    "VersionId": "loaded at build time from dockerfile",
+    "ContentType": "loaded at build time from dockerfile",
+    "Metadata": {
+        "model_type": "loaded at build time from dockerfile",
+        "model_arch": "loaded at build time from dockerfile",
+        "model_archive_name": "loaded at build time from dockerfile",
+        "model_content": "loaded at build time from dockerfile",
+        "model_data_date": "loaded at build time from dockerfile"
+    }
+}

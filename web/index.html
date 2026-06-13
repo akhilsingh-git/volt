@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Volt ⚡ · live</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<script src="https://unpkg.com/mqtt@5.7.0/dist/mqtt.min.js"></script>
+<script src="webrtc.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05060d; --bg2:#080a16; --panel:#0b0e1d; --panel2:#10142a; --line:#23305a;
+    --txt:#e7f1ff; --muted:#7486b3;
+    --cyan:#00e5ff; --mag:#ff2e88; --violet:#9b5cff; --lime:#c8ff00;
+    --accent:var(--cyan); --accent2:var(--mag); --live:#ff2b3d; --ok:#3dffa0;
+    --gc:0 0 8px rgba(0,229,255,.55); --gm:0 0 8px rgba(255,46,136,.55);
+    --bevel:polygon(0 8px,8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%);
+    --bevel-sm:polygon(0 5px,5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 'Rajdhani',-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--txt);
+    background-image:radial-gradient(900px 500px at 80% -10%,rgba(155,92,255,.14),transparent 60%),
+      radial-gradient(800px 500px at 0% 0%,rgba(0,229,255,.10),transparent 55%);}
+  /* HUD scanlines + grid overlay */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;
+    background-image:repeating-linear-gradient(0deg,rgba(0,229,255,.025) 0 1px,transparent 1px 3px),
+      linear-gradient(rgba(35,48,90,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(35,48,90,.18) 1px,transparent 1px);
+    background-size:100% 3px,42px 42px,42px 42px;mix-blend-mode:screen;}
+  body>*{position:relative;z-index:2}
+  button{cursor:pointer;font-family:'Rajdhani',sans-serif}
+  input{font-family:'Rajdhani',sans-serif}
+  ::selection{background:var(--cyan);color:#000}
+  .msgs::-webkit-scrollbar,.dir::-webkit-scrollbar{height:6px;width:6px}
+  .msgs::-webkit-scrollbar-thumb,.dir::-webkit-scrollbar-thumb{background:var(--line)}
+  /* logo */
+  .logo{font-family:'Orbitron',sans-serif;font-weight:900;font-size:22px;letter-spacing:3px;text-transform:uppercase;
+    color:var(--cyan);text-shadow:0 0 6px rgba(0,229,255,.7),0 0 18px rgba(0,229,255,.4)}
+  .logo span{color:var(--mag);font-family:'Rajdhani';font-weight:700;font-size:12px;letter-spacing:2px;text-shadow:var(--gm);margin-left:2px}
+  /* buttons */
+  .btn{background:linear-gradient(135deg,var(--cyan),#0aa6c4);border:0;color:#021018;clip-path:var(--bevel-sm);
+    padding:8px 16px;font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;
+    box-shadow:0 0 0 1px rgba(0,229,255,.5),0 0 14px rgba(0,229,255,.25);transition:.12s}
+  .btn:hover{filter:brightness(1.15);box-shadow:0 0 0 1px var(--cyan),0 0 22px rgba(0,229,255,.55)}
+  .btn.ghost{background:transparent;color:var(--cyan);box-shadow:inset 0 0 0 1px var(--line)}
+  .btn.ghost:hover{box-shadow:inset 0 0 0 1px var(--cyan),0 0 16px rgba(0,229,255,.3)}
+  .btn.pink{background:linear-gradient(135deg,var(--mag),#b5185f);color:#fff;box-shadow:0 0 0 1px rgba(255,46,136,.5),0 0 14px rgba(255,46,136,.3)}
+  .btn.pink:hover{box-shadow:0 0 0 1px var(--mag),0 0 22px rgba(255,46,136,.6)}
+  .btn:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}
+  /* header */
+  header{display:flex;align-items:center;gap:14px;padding:14px 20px;background:linear-gradient(180deg,var(--panel),rgba(11,14,29,.6));
+    border-bottom:1px solid var(--cyan);box-shadow:0 2px 18px rgba(0,229,255,.18)}
+  .userbox{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .userbox .name{color:var(--cyan);font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:14px}
+  /* directory */
+  .dir{display:flex;align-items:center;gap:10px;padding:10px 20px;overflow-x:auto;background:var(--bg2);border-bottom:1px solid var(--line)}
+  .dir .lbl{font-family:'Orbitron';font-size:11px;color:var(--lime);font-weight:700;letter-spacing:2px;white-space:nowrap;text-shadow:0 0 8px rgba(200,255,0,.4)}
+  .chan{display:flex;align-items:center;gap:8px;background:var(--panel2);clip-path:var(--bevel-sm);padding:6px 14px;font-size:14px;font-weight:600;
+    white-space:nowrap;color:var(--txt);box-shadow:inset 0 0 0 1px var(--line);transition:.12s}
+  .chan:hover{box-shadow:inset 0 0 0 1px var(--cyan),0 0 14px rgba(0,229,255,.25)}
+  .chan.active{box-shadow:inset 0 0 0 1px var(--mag),0 0 16px rgba(255,46,136,.35);background:#1a0f24}
+  .chan b{font-family:'Rajdhani';letter-spacing:.5px}
+  .chan .reddot{width:7px;height:7px;border-radius:50%;background:var(--live);box-shadow:0 0 8px var(--live);animation:p 1.4s infinite}
+  .chan .v{color:var(--muted);font-size:12px}
+  .dir .none{color:var(--muted);font-size:13px;font-style:italic}
+  /* layout */
+  .wrap{display:grid;grid-template-columns:1fr 340px;gap:18px;padding:18px;max-width:1320px;margin:0 auto}
+  .stage{background:#000;position:relative;border:1px solid var(--violet);clip-path:var(--bevel);
+    box-shadow:0 0 0 1px rgba(155,92,255,.3),0 0 40px rgba(155,92,255,.18)}
+  video{width:100%;display:block;aspect-ratio:16/9;background:#000}
+  .badge{position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:7px;background:rgba(0,0,0,.7);clip-path:var(--bevel-sm);
+    padding:5px 11px;font-family:'Orbitron';font-size:11px;font-weight:700;letter-spacing:1.5px;box-shadow:inset 0 0 0 1px var(--line)}
+  .dot{width:9px;height:9px;border-radius:50%;background:#556}
+  .dot.on{background:var(--live);box-shadow:0 0 10px var(--live);animation:p 1.4s infinite}
+  @keyframes p{0%{box-shadow:0 0 0 0 rgba(255,43,61,.7)}70%{box-shadow:0 0 0 9px rgba(255,43,61,0)}100%{box-shadow:0 0 0 0 rgba(255,43,61,0)}}
+  .overlays{position:absolute;top:12px;right:12px;display:flex;gap:7px;align-items:center}
+  .pill{background:rgba(0,0,0,.7);clip-path:var(--bevel-sm);padding:5px 11px;font-size:12px;font-weight:600;letter-spacing:.5px;color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+  .pill.live{color:#fff}
+  button.pill{cursor:pointer;font-family:'Rajdhani';font-weight:700;text-transform:uppercase}
+  .pill.rt.on{background:linear-gradient(135deg,var(--mag),#b5185f);color:#fff;box-shadow:0 0 0 1px var(--mag),0 0 16px rgba(255,46,136,.5)}
+  .golive{border-top:1px solid var(--line);margin-top:18px;padding-top:16px}
+  .golive h3{margin:0 0 10px;font-family:'Orbitron';font-size:13px;letter-spacing:1px;color:var(--lime)}
+  .golive .gl-row{display:flex;gap:8px}
+  .golive .gl-row .btn{flex:1}
+  #selfPreview{display:none;width:100%;margin-top:10px;background:#000;aspect-ratio:16/9;clip-path:var(--bevel-sm);box-shadow:inset 0 0 0 1px var(--violet)}
+  #goliveStatus{font-size:13px;color:var(--muted);margin-top:8px}
+  select.q{background:rgba(0,0,0,.7);color:var(--cyan);border:0;box-shadow:inset 0 0 0 1px var(--line);clip-path:var(--bevel-sm);font-size:12px;font-weight:600;padding:5px 8px}
+  .meta-row{padding:14px 4px 4px;display:flex;align-items:flex-start;gap:12px}
+  .meta-row .av{width:44px;height:44px;clip-path:var(--bevel-sm);background:linear-gradient(135deg,var(--cyan),var(--mag));display:flex;align-items:center;justify-content:center;
+    font-family:'Orbitron';font-weight:900;color:#04121a;flex:0 0 auto;box-shadow:0 0 16px rgba(0,229,255,.4)}
+  .meta-row .t{font-family:'Orbitron';font-weight:700;font-size:17px;letter-spacing:.5px}
+  .meta-row .by{color:var(--cyan);font-size:13px;font-weight:600;letter-spacing:.5px}
+  /* panels (chat / clip / modal share the HUD look) */
+  .chat{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line);clip-path:var(--bevel);display:flex;flex-direction:column;height:540px;box-shadow:0 0 30px rgba(0,0,0,.5)}
+  .chat h3{margin:0;padding:13px 16px;border-bottom:1px solid var(--line);font-family:'Orbitron';font-size:13px;letter-spacing:1px;color:var(--cyan);display:flex;justify-content:space-between;align-items:center;gap:6px}
+  .conn{font-size:10px;font-weight:600;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+  .conn.ok{color:var(--ok);text-shadow:0 0 8px rgba(61,255,160,.5)}
+  .msgs{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+  .msg{font-size:14px;word-wrap:break-word;font-weight:500}
+  .msg b{color:var(--mag);font-weight:700;text-shadow:var(--gm)}
+  .msg.sys{color:var(--lime);font-style:normal;font-size:12px;letter-spacing:.5px;opacity:.8}
+  .compose{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+  .compose input{flex:1;background:#04060e;color:var(--txt);border:0;box-shadow:inset 0 0 0 1px var(--line);clip-path:var(--bevel-sm);padding:9px 12px;font-weight:600}
+  .compose input:focus{outline:0;box-shadow:inset 0 0 0 1px var(--cyan),0 0 12px rgba(0,229,255,.2)}
+  .compose button{background:linear-gradient(135deg,var(--mag),#b5185f);border:0;color:#fff;clip-path:var(--bevel-sm);padding:0 16px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+  .compose.locked{justify-content:center;color:var(--muted);font-size:13px;padding:14px}
+  .compose.locked a{color:var(--cyan);cursor:pointer;font-weight:700}
+  /* reco */
+  .reco{grid-column:1/-1;margin-top:6px}
+  .reco h3{font-family:'Orbitron';font-size:14px;letter-spacing:1px;margin:0 0 12px;color:var(--violet);text-shadow:0 0 10px rgba(155,92,255,.4)}
+  .reco h3 small{color:var(--muted);font-family:'Rajdhani';font-weight:500;font-size:12px;letter-spacing:0}
+  .rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:14px}
+  .clip{background:var(--panel);border:1px solid var(--line);clip-path:var(--bevel-sm);overflow:hidden;transition:.12s}
+  .clip:hover{box-shadow:0 0 0 1px var(--cyan),0 0 18px rgba(0,229,255,.3);transform:translateY(-2px)}
+  .thumb{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--cyan);
+    background:linear-gradient(135deg,#10142a,#1d1140);text-shadow:0 0 12px var(--cyan)}
+  .clip .meta{padding:9px 11px}
+  .clip .meta .t{font-size:13px;font-weight:700;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .clip .meta .c{font-size:11px;color:var(--lime);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+  /* modal */
+  .backdrop{position:fixed;inset:0;background:rgba(2,4,12,.82);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:50}
+  .backdrop.show{display:flex}
+  .modal{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--cyan);clip-path:var(--bevel);width:440px;max-width:92vw;padding:24px;
+    box-shadow:0 0 0 1px rgba(0,229,255,.3),0 0 50px rgba(0,229,255,.2)}
+  .modal h2{margin:0 0 4px;font-family:'Orbitron';font-size:20px;letter-spacing:1px;color:var(--cyan);text-shadow:var(--gc)}
+  .modal .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+  .modal label{display:block;font-size:11px;color:var(--lime);margin:10px 0 4px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700}
+  .modal input[type=text],.modal input[type=password]{width:100%;background:#04060e;color:var(--txt);border:0;box-shadow:inset 0 0 0 1px var(--line);clip-path:var(--bevel-sm);padding:11px;font-weight:600}
+  .modal input:focus{outline:0;box-shadow:inset 0 0 0 1px var(--cyan)}
+  .modal .row{display:flex;gap:10px;margin-top:18px}
+  .modal .row .btn{flex:1;padding:11px}
+  .modal .err{color:#ff6b6b;font-size:13px;min-height:18px;margin-top:8px;font-weight:600}
+  .modal .toggle{text-align:center;margin-top:14px;color:var(--muted);font-size:13px}
+  .modal .toggle a{color:var(--cyan);cursor:pointer;font-weight:700}
+  .close{float:right;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;margin:-8px -4px 0 0}
+  .close:hover{color:var(--mag)}
+  /* go-live key fields */
+  .kv{margin:12px 0}
+  .kv .k{font-size:11px;color:var(--lime);margin-bottom:4px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700}
+  .copyfield{display:flex;gap:8px}
+  .copyfield input{flex:1;background:#04060e;color:var(--cyan);border:0;box-shadow:inset 0 0 0 1px var(--line);clip-path:var(--bevel-sm);padding:10px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px}
+  .copyfield button{background:var(--panel2);color:var(--cyan);border:0;box-shadow:inset 0 0 0 1px var(--line);clip-path:var(--bevel-sm);padding:0 14px;font-weight:700;text-transform:uppercase;font-size:12px}
+  .hint{font-size:12px;color:var(--muted);line-height:1.7;background:#04060e;box-shadow:inset 0 0 0 1px var(--line);clip-path:var(--bevel-sm);padding:11px 13px;margin-top:12px;font-family:'JetBrains Mono',monospace}
+  .hint code{color:var(--cyan)}
+  @media(max-width:880px){.wrap{grid-template-columns:1fr}.chat{height:360px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">volt<span>⚡ live</span></div>
+  <div class="userbox" id="userbox"><!-- filled by JS --></div>
+</header>
+
+<div class="dir" id="dir">
+  <span class="lbl">LIVE NOW</span>
+  <span class="none" id="dirNone">no one is live — log in and hit “Go Live”.</span>
+</div>
+
+<div class="wrap">
+  <div>
+    <div class="stage">
+      <video id="video" controls autoplay muted playsinline></video>
+      <div class="badge"><span class="dot" id="liveDot"></span><span id="liveTxt">OFFLINE</span></div>
+      <div class="overlays">
+        <span class="pill" id="viewers">👁 0</span>
+        <button class="pill rt" id="rtBtn" onclick="toggleRealtime()" title="Switch to sub-second WebRTC playback">⚡ Real-time</button>
+        <select class="q" id="quality" onchange="setQuality(this.value)" title="Auto = adaptive (ABR, ~3-6s); fixed = low-latency (~1-2s)">
+          <option value="auto">Auto (ABR)</option>
+          <option value="source" selected>Source ⚡</option>
+          <option value="1080">1080p ⚡</option>
+          <option value="720">720p ⚡</option>
+          <option value="480">480p ⚡</option>
+          <option value="360">360p ⚡</option>
+        </select>
+      </div>
+    </div>
+    <div class="meta-row">
+      <div class="av" id="chanAv">?</div>
+      <div>
+        <div class="t" id="chanTitle">—</div>
+        <div class="by" id="chanBy">select a channel</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chat">
+    <h3>Chat <span id="presence" class="conn"></span><span class="conn" id="conn">connecting…</span></h3>
+    <div class="msgs" id="msgs"></div>
+    <div class="compose" id="compose"><!-- filled by JS --></div>
+  </div>
+
+  <div class="reco">
+    <h3>Recommended clips <small id="recoNote">— turing</small></h3>
+    <div class="rail" id="rail"></div>
+  </div>
+</div>
+
+<!-- auth modal -->
+<div class="backdrop" id="authModal">
+  <div class="modal">
+    <span class="close" onclick="closeAuth()">×</span>
+    <h2 id="authTitle">Log in to Volt</h2>
+    <div class="sub" id="authSub">Watch is open to all. Log in to chat and go live.</div>
+    <label>Username</label>
+    <input type="text" id="authUser" autocomplete="username" placeholder="lowercase, 3–20 chars" />
+    <label>Password</label>
+    <input type="password" id="authPass" autocomplete="current-password" placeholder="min 6 chars" />
+    <div class="err" id="authErr"></div>
+    <div class="row">
+      <button class="btn" id="authSubmit">Log in</button>
+    </div>
+    <div class="toggle" id="authToggle">New here? <a onclick="setAuthMode('signup')">Create an account</a></div>
+  </div>
+</div>
+
+<!-- go-live modal -->
+<div class="backdrop" id="liveModal">
+  <div class="modal">
+    <span class="close" onclick="closeLive()">×</span>
+    <h2>Go Live ⚡</h2>
+    <div class="sub">Point OBS (or any RTMP encoder) at the server below.</div>
+    <label>Stream title</label>
+    <div class="copyfield">
+      <input type="text" id="titleInput" placeholder="What are you streaming?" />
+      <button onclick="saveTitle()">Save</button>
+    </div>
+    <div class="kv">
+      <div class="k">Server URL</div>
+      <div class="copyfield"><input type="text" id="rtmpUrl" readonly /><button onclick="copyEl('rtmpUrl')">Copy</button></div>
+    </div>
+    <div class="kv">
+      <div class="k">Stream key (keep secret)</div>
+      <div class="copyfield"><input type="text" id="streamKey" readonly /><button onclick="copyEl('streamKey')">Copy</button></div>
+    </div>
+    <div class="row">
+      <button class="btn ghost" onclick="resetKey()">Reset key</button>
+      <button class="btn pink" onclick="watchMine()">Watch my channel</button>
+    </div>
+    <div class="golive">
+      <h3>⚡ Go live from your browser (no OBS)</h3>
+      <div class="gl-row" id="goliveStart">
+        <button class="btn" onclick="goLive('camera')">📷 Camera + mic</button>
+        <button class="btn ghost" onclick="goLive('screen')">🖥 Share screen</button>
+      </div>
+      <button class="btn pink" id="goliveStop" style="display:none;width:100%" onclick="stopGoLive()">■ Stop broadcast</button>
+      <video id="selfPreview" autoplay muted playsinline></video>
+      <div id="goliveStatus">not broadcasting</div>
+    </div>
+    <div class="hint">
+      Or use OBS → Server <code>rtmp://localhost:1935</code>, Key <code><span id="hintUser">you</span>?user=<span id="hintUser2">you</span>&amp;pass=<span id="hintKey">KEY</span></code><br/>
+      Or CLI: <code>./stream.sh <span id="hintUser3">you</span> --key <span id="hintKey2">KEY</span></code>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const API = '/api';
+let token = localStorage.getItem('volt_token') || null;
+let me = null;                 // {username, stream_key, ...}
+let channel = null;            // current channel being watched
+let hls, mqttClient, topic;
+let sid = 'v_' + Math.random().toString(16).slice(2);
+
+// ─── API helper ──────────────────────────────────────────────────────
+async function api(path, {method='GET', body=null, auth=false}={}){
+  const headers = {'Content-Type':'application/json'};
+  if (auth && token) headers['Authorization'] = 'Bearer ' + token;
+  const r = await fetch(API + path, {method, headers, body: body?JSON.stringify(body):null});
+  const data = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(data.detail || ('HTTP '+r.status));
+  return data;
+}
+
+// ─── auth ────────────────────────────────────────────────────────────
+let authMode = 'login';
+function openAuth(mode='login'){ setAuthMode(mode); $('#authErr').textContent=''; $('#authModal').classList.add('show'); $('#authUser').focus(); }
+function closeAuth(){ $('#authModal').classList.remove('show'); }
+function setAuthMode(mode){
+  authMode = mode;
+  $('#authTitle').textContent = mode==='signup' ? 'Create your Volt account' : 'Log in to Volt';
+  $('#authSubmit').textContent = mode==='signup' ? 'Sign up' : 'Log in';
+  $('#authToggle').innerHTML = mode==='signup'
+    ? 'Already have an account? <a onclick="setAuthMode(\'login\')">Log in</a>'
+    : 'New here? <a onclick="setAuthMode(\'signup\')">Create an account</a>';
+}
+$('#authSubmit').onclick = async ()=>{
+  const username = $('#authUser').value.trim(), password = $('#authPass').value;
+  $('#authErr').textContent='';
+  try{
+    const d = await api('/auth/'+(authMode==='signup'?'signup':'login'), {method:'POST', body:{username, password}});
+    token = d.token; localStorage.setItem('volt_token', token); me = d.user;
+    closeAuth(); renderUser(); renderCompose(); loadReco();
+  }catch(e){ $('#authErr').textContent = e.message; }
+};
+$('#authPass').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#authSubmit').click(); });
+function logout(){ token=null; me=null; localStorage.removeItem('volt_token'); renderUser(); renderCompose(); loadReco(); }
+
+function renderUser(){
+  const box = $('#userbox');
+  if (me){
+    box.innerHTML = `<span class="name">@${me.username}</span>
+      <button class="btn pink" onclick="openLive()">Go Live</button>
+      <button class="btn ghost" onclick="logout()">Log out</button>`;
+  }else{
+    box.innerHTML = `<button class="btn ghost" onclick="openAuth('login')">Log in</button>
+      <button class="btn" onclick="openAuth('signup')">Sign up</button>`;
+  }
+}
+
+// ─── go-live ─────────────────────────────────────────────────────────
+function openLive(){
+  if(!me) return openAuth('login');
+  $('#rtmpUrl').value = me.rtmp_url;
+  $('#streamKey').value = me.publish_key;     // OBS key: user?user=..&pass=..
+  $('#titleInput').value = me.title || '';
+  for (const id of ['hintUser','hintUser2','hintUser3']) $('#'+id).textContent = me.username;
+  for (const id of ['hintKey','hintKey2']) $('#'+id).textContent = me.stream_key;
+  $('#liveModal').classList.add('show');
+}
+function closeLive(){ $('#liveModal').classList.remove('show'); }
+function copyEl(id){ const el=$('#'+id); el.select(); navigator.clipboard.writeText(el.value); }
+async function saveTitle(){
+  try{ const d = await api('/me/stream', {method:'PATCH', auth:true, body:{title:$('#titleInput').value}}); me=d.user; }catch(e){}
+}
+async function resetKey(){
+  if(!confirm('Reset your stream key? Your current OBS key will stop working.')) return;
+  const d = await api('/me/reset_key', {method:'POST', auth:true});
+  me=d.user; $('#streamKey').value=me.publish_key; $('#hintKey').textContent=me.stream_key;
+}
+function watchMine(){ closeLive(); switchChannel(me.username); }
+
+// ─── channel directory ───────────────────────────────────────────────
+async function refreshDirectory(){
+  let list = [];
+  try{ list = (await api('/channels')).channels; }catch(e){}
+  const dir = $('#dir');
+  dir.querySelectorAll('.chan').forEach(n=>n.remove());
+  $('#dirNone').style.display = list.length ? 'none' : '';
+  list.sort((a,b)=>b.viewers-a.viewers).forEach(ch=>{
+    const el = document.createElement('div');
+    el.className = 'chan' + (ch.name===channel?' active':'');
+    el.innerHTML = `<span class="reddot"></span><b>${ch.name}</b>
+      <span class="v">${ch.title?('· '+ch.title):''} · 👁 ${ch.viewers}</span>`;
+    el.onclick = ()=>switchChannel(ch.name);
+    dir.appendChild(el);
+  });
+  // auto-pick a live channel if we're not watching anything live yet
+  if(!channel && list.length) switchChannel(list[0].name);
+}
+
+// ─── playback ────────────────────────────────────────────────────────
+async function switchChannel(name){
+  channel = name;
+  document.querySelectorAll('.chan').forEach(c=>c.classList.toggle('active', c.querySelector('b')?.textContent===name));
+  $('#chanAv').textContent = name[0].toUpperCase();
+  let info = {}; try{ info = await api('/channels/'+name); }catch(e){}
+  $('#chanTitle').textContent = info.title || name;
+  $('#chanBy').textContent = '@'+name;
+  // Browser/WebRTC-published streams (H264/Opus) play natively over WebRTC;
+  // their HLS "Source" tier can have Opus-audio issues — so auto-pick Real-time.
+  const wantRT = info.source === 'webrtc';
+  playMode = wantRT ? 'webrtc' : 'hls';
+  const rb = $('#rtBtn'); rb.classList.toggle('on', wantRT);
+  rb.textContent = wantRT ? '⚡ Real-time ON' : '⚡ Real-time';
+  $('#quality').style.display = wantRT ? 'none' : '';
+  startPlayback(name); connectChat(name);
+}
+// quality: 'auto' (ABR standard HLS) | 'source'|'720'|'480'|'360' (LL-HLS rungs)
+let quality = 'source';
+function hlsUrlFor(key){
+  if (quality === 'auto')   return `/abr/${key}/master.m3u8`;   // adaptive, ~3-6s
+  if (quality === 'source') return `/hls/${key}/index.m3u8`;    // LL-HLS source
+  return `/hls/${key}_${quality}/index.m3u8`;                   // LL-HLS rung
+}
+function play(key){
+  const src = hlsUrlFor(key);
+  const ll = quality !== 'auto';
+  if (hls){ hls.destroy(); hls=null; }
+  if (window.Hls && Hls.isSupported()){
+    hls = new Hls(ll ? { lowLatencyMode:true, backBufferLength:8, liveSyncDurationCount:2, maxLiveSyncPlaybackRate:1.5 }
+                     : { lowLatencyMode:false, backBufferLength:30 });
+    hls.loadSource(src); hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, ()=>{ setLive(true); video.play().catch(()=>{}); });
+    hls.on(Hls.Events.ERROR,(_,d)=>{ if(d.fatal && d.type==='networkError') setLive(false); });
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')){
+    video.src = src; video.addEventListener('loadedmetadata',()=>setLive(true));
+  }
+}
+function setQuality(q){
+  quality = q;
+  if (playMode === 'hls' && channel) play(channel);
+}
+function setLive(on){ $('#liveDot').classList.toggle('on',on); $('#liveTxt').textContent = on?'LIVE':'OFFLINE'; $('#viewers').classList.toggle('live',on); }
+
+// liveness + viewer heartbeat (liveness comes from the API → mediamtx ready state)
+setInterval(async ()=>{
+  if(!channel) return;
+  try{
+    const info = await api('/channels/'+channel);
+    setLive(info.live);
+    if(info.live){ const d = await api(`/channels/${channel}/heartbeat`,{method:'POST',body:{sid, user: me?me.username:null}}); $('#viewers').textContent='👁 '+d.viewers; }
+    else { $('#viewers').textContent='👁 0'; }
+  }catch{ setLive(false); }
+}, 5000);
+setInterval(refreshDirectory, 5000);
+// chat presence (online users in the room)
+setInterval(async ()=>{
+  if(!channel) return;
+  try{
+    const p = await api(`/chat/${channel}/presence`);
+    const el=$('#presence');
+    el.textContent = p.online ? `· ${p.online} online` : '';
+    el.title = p.users.join(', ');
+  }catch{}
+}, 8000);
+
+// ─── chat (read over MQTT, write via API) ────────────────────────────
+async function connectChat(key){
+  topic = `volt/chat/${key}`;
+  $('#msgs').innerHTML='';
+  if (mqttClient && prevTopic){ try{mqttClient.unsubscribe(prevTopic)}catch{} }
+  if (!mqttClient){
+    const url = `${location.protocol==='https:'?'wss':'ws'}://${location.host}/mqtt`;
+    mqttClient = mqtt.connect(url, { clientId:'web_'+Math.random().toString(16).slice(2) });
+    mqttClient.on('connect', ()=>{ $('#conn').textContent='connected'; $('#conn').classList.add('ok'); mqttClient.subscribe(topic); });
+    mqttClient.on('reconnect', ()=>{ $('#conn').textContent='reconnecting…'; $('#conn').classList.remove('ok'); });
+    mqttClient.on('message', (_,payload)=>{ try{ const m=JSON.parse(payload.toString()); m.sys ? sysMsg(m.text) : addMsg(m.user,m.text); }catch{} });
+  } else {
+    mqttClient.subscribe(topic);
+  }
+  prevTopic = topic;
+  // load recent room history before live messages stream in
+  try{
+    const h = await api(`/chat/${key}/history`);
+    h.messages.forEach(m => m.sys ? sysMsg(m.text) : addMsg(m.user, m.text));
+  }catch{}
+  sysMsg(`— you joined #${key} —`);
+}
+let prevTopic = null;
+function addMsg(user,text){ const d=document.createElement('div'); d.className='msg'; d.innerHTML='<b></b>: <span></span>'; d.querySelector('b').textContent=user; d.querySelector('span').textContent=text; const box=$('#msgs'); box.appendChild(d); box.scrollTop=box.scrollHeight; }
+function sysMsg(t){ const d=document.createElement('div'); d.className='msg sys'; d.textContent=t; const box=$('#msgs'); box.appendChild(d); box.scrollTop=box.scrollHeight; }
+function renderCompose(){
+  const c = $('#compose');
+  if (me){
+    c.className='compose';
+    c.innerHTML = `<input id="chatInput" placeholder="Say something…" maxlength="500"/><button id="sendBtn">Send</button>`;
+    $('#sendBtn').onclick = send;
+    $('#chatInput').addEventListener('keydown',e=>{ if(e.key==='Enter') send(); });
+  }else{
+    c.className='compose locked';
+    c.innerHTML = `<span><a onclick="openAuth('login')">Log in</a> to join the chat</span>`;
+  }
+}
+async function send(){
+  const inp=$('#chatInput'); const t=inp.value.trim(); if(!t||!channel) return;
+  inp.value='';
+  try{ await api('/chat/'+channel, {method:'POST', auth:true, body:{text:t}}); }
+  catch(e){ if(e.message.includes('401')){ logout(); openAuth('login'); } sysMsg('send failed: '+e.message); }
+}
+
+// ─── reco ────────────────────────────────────────────────────────────
+const CATS = {"20097":"Free Fire","1000":"Gaming","1001":"IRL","1002":"Music","13266":"Esports","70323":"Talk","264017":"Creative"};
+async function loadReco(){
+  const userId = me ? me.username : 'demo';
+  try{
+    const r = await fetch(`/reco/api/v1/clips/?user_id=${userId}&filters=`, { headers:{ 'X-CLIENT-ID':'volt-local','X-CLIENT-SECRET':'volt-local-secret' } });
+    const j = await r.json();
+    const uids = Object.keys((j.data&&j.data.clip_uids)||{}).slice(0,14);
+    $('#recoNote').textContent = `— turing · ${userId} · ${j.data.is_generic_suggestion?'trending':'for you'}`;
+    const rail=$('#rail'); rail.innerHTML='';
+    uids.forEach(uid=>{ const cat=uid.split('_')[1]; const el=document.createElement('div'); el.className='clip'; el.innerHTML='<div class="thumb">▶</div><div class="meta"><div class="t"></div><div class="c"></div></div>'; el.querySelector('.t').textContent=uid; el.querySelector('.c').textContent=CATS[cat]||('cat '+cat); rail.appendChild(el); });
+  }catch(e){ $('#recoNote').textContent='— reco unavailable'; }
+}
+
+// ─── boot ────────────────────────────────────────────────────────────
+async function boot(){
+  if (token){ try{ me = (await api('/me',{auth:true})).user; }catch{ token=null; localStorage.removeItem('volt_token'); } }
+  renderUser(); renderCompose(); loadReco();
+  await refreshDirectory();
+  if (!channel) switchChannel('demo');   // fall back to the demo channel
+}
+boot();
+</script>
+</body>
+</html>

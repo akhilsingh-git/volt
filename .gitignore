@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+*.log
+
+# generated at runtime (synthetic models, HLS/ABR output live in docker volumes)
+reco/recommenders/models/
+
+# OS / editor
+.DS_Store
+.vscode/
+*.swp

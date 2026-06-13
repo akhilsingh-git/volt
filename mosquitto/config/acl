@@ -1,0 +1,6 @@
+# Anonymous clients (browsers over WebSocket): subscribe-only on chat topics.
+topic read volt/chat/#
+
+# The Volt API service: full access (it publishes verified chat messages).
+user api
+topic readwrite #

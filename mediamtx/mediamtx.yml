@@ -1,0 +1,59 @@
+# Volt streaming engine — RTMP ingest → Low-Latency HLS.
+# Replaces nginx-rtmp (which can't do LL-HLS). Publish auth is delegated to the
+# Volt API over HTTP; viewing (read) is public.
+
+logLevel: info
+logDestinations: [stdout]
+
+# Control API — the Volt API polls /v3/paths/list to know who's live.
+api: yes
+apiAddress: :9997
+
+# ── auth ──────────────────────────────────────────────────────────────
+# Only `publish` is gated (stream-key check in the Volt API). Reading/HLS
+# playback and the control API are excluded so viewing stays open.
+authMethod: http
+authHTTPAddress: http://api:8000/mediamtx/auth
+authHTTPExclude:
+  - action: read
+  - action: playback
+  - action: api
+  - action: metrics
+  - action: pprof
+
+# ── ingest ────────────────────────────────────────────────────────────
+rtmp: yes
+rtmpAddress: :1935
+# RTSP is used internally by the transcoder to read sources (it supports Opus,
+# unlike RTMP/FLV) so browser/WebRTC-published streams can be transcoded too.
+rtsp: yes
+rtspAddress: :8554
+srt: no
+
+# ── WebRTC (WHIP publish / WHEP playback) — sub-second latency ──────────
+# Browser-based "go live" (no OBS) and ultra-low-latency viewing.
+webrtc: yes
+webrtcAddress: :8889
+webrtcEncryption: no
+webrtcAllowOrigins: ["*"]
+webrtcLocalUDPAddress: :8189
+# Only advertise 127.0.0.1 as the ICE host (reachable via the published UDP
+# port). Disable container-interface IPs (172.x) the host browser can't reach.
+webrtcIPsFromInterfaces: no
+webrtcAdditionalHosts: [127.0.0.1]
+
+# ── Low-Latency HLS output ──────────────────────────────────────────────
+hls: yes
+hlsAddress: :8888
+hlsVariant: lowLatency      # fMP4 + EXT-X-PART + preload hints + blocking reload
+hlsAlwaysRemux: yes         # start packaging on publish (don't wait for a viewer)
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms      # ~200ms parts → sub-second-ish glass-to-glass
+# We sit behind nginx (a trusted reverse proxy). nginx injects this secret as
+# `Authorization: Bearer`, which makes mediamtx skip its browser cookieCheck
+# redirect — so LL-HLS works cleanly same-origin under the /hls/ path.
+hlsCDNSecret: volt-cdn-secret
+
+paths:
+  all_others:

@@ -1,0 +1,88 @@
+# Volt ⚡ — local mini live-streaming stack: streaming + auth + chat + clip reco.
+# Everything is reachable through http://localhost:8088 (single origin).
+name: volt-local
+
+services:
+  # ── Front door (nginx): serves web app, reverse-proxies hls/api/reco/mqtt ──
+  rtmp:
+    image: alfg/nginx-rtmp:latest
+    # Bypass the image's env-templating entrypoint; run our config directly.
+    entrypoint: ["/usr/local/nginx/sbin/nginx"]
+    command: ["-c", "/opt/nginx.conf", "-g", "daemon off;"]
+    ports:
+      - "8088:80"       # watch app + /hls + /api + /reco + /mqtt
+    volumes:
+      - ./rtmp/nginx.conf:/opt/nginx.conf:ro
+      - ./web:/www/static:ro
+      - abr:/data/abr:ro          # ABR HLS master/segments (written by transcoder)
+    depends_on: [api, reco, mqtt, mediamtx]
+    restart: unless-stopped
+
+  # ── mediamtx: RTMP ingest → Low-Latency HLS; publish gated via Volt API ──
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    ports:
+      - "1935:1935"       # RTMP ingest (OBS/ffmpeg)
+      - "8889:8889"       # WebRTC WHIP/WHEP signaling (HTTP)
+      - "8189:8189/udp"   # WebRTC media (ICE host candidate 127.0.0.1:8189)
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    depends_on: [api]
+    restart: unless-stopped
+
+  # ── Volt API: accounts, JWT, stream keys, publish gating, authed chat, presence ──
+  api:
+    build: ./api
+    environment:
+      - JWT_SECRET=volt-dev-secret-change-me
+      - MQTT_HOST=mqtt
+      - MQTT_API_PASSWORD=voltmqtt-dev
+      - MEDIAMTX_API=http://mediamtx:9997
+      - TRANSCODER_SECRET=volt-transcoder-secret
+    volumes:
+      - apidata:/data
+    depends_on: [mqtt]
+    restart: unless-stopped
+
+  # ── transcoder: per-channel ABR ladder (LL-HLS rungs + ABR master) ──
+  transcoder:
+    build: ./transcoder
+    environment:
+      - MEDIAMTX_RTMP=rtmp://mediamtx:1935
+      - MEDIAMTX_API=http://mediamtx:9997
+      - TRANSCODER_SECRET=volt-transcoder-secret
+      - ABR_DIR=/data/abr
+    volumes:
+      - abr:/data/abr
+    depends_on: [mediamtx]
+    restart: unless-stopped
+
+  # ── Volt chat (realtime transport): MQTT broker w/ WS listener ──
+  # Browsers are read-only (ACL); only the API may publish. The broker password
+  # for the `api` user is generated at startup from MQTT_API_PASSWORD.
+  mqtt:
+    image: eclipse-mosquitto:2
+    entrypoint: ["sh", "-c"]
+    command:
+      - mkdir -p /run/mosquitto && rm -f /run/mosquitto/passwd &&
+        mosquitto_passwd -c -b /run/mosquitto/passwd api "$$MQTT_API_PASSWORD" &&
+        chown mosquitto /run/mosquitto/passwd && chmod 600 /run/mosquitto/passwd &&
+        exec mosquitto -c /mosquitto/config/mosquitto.conf
+    environment:
+      - MQTT_API_PASSWORD=voltmqtt-dev
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/config/acl:/mosquitto/config/acl:ro
+    restart: unless-stopped
+
+  # ── turing: clip recommender (synthetic models seeded at startup) ──
+  reco:
+    build: ./reco
+    environment:
+      - CLIENT_ID=volt-local
+      - CLIENT_SECRET=volt-local-secret
+    restart: unless-stopped
+
+volumes:
+  apidata:
+  abr:
